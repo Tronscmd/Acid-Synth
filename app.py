@@ -26,6 +26,7 @@ def generate_tone_adsr(freq, duration, velocity, sr=44100):
 st.set_page_config(page_title="Python Acid Synth", page_icon="🎹")
 st.title("🎹 Python Acid Synth")
 st.markdown("Genera loop acidi direttamente nel browser e scaricali in WAV.")
+st.caption("Copyright © 2026 VMMGAG")
 
 # Sidebar per i preset e controlli globali
 st.sidebar.header("🎛️ Controlli")
