@@ -76,3 +76,4 @@ if st.button("🚀 GENERA AUDIO"):
         
     except Exception as e:
         st.error(f"Errore nella generazione: {e}")
+    st.markdown("<br><hr><center>Copyright © 2026 VMMGAG</center>", unsafe_allow_html=True)
