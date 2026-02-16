@@ -27,6 +27,7 @@ st.set_page_config(page_title="Python Acid Synth", page_icon="🎹")
 st.title("🎹 Python Acid Synth")
 st.markdown("Genera loop acidi direttamente nel browser e scaricali in WAV.")
 st.caption("Copyright © 2026 VMMGAG")
+st.markdown("<br><hr><center>Copyright © 2026 VMMGAG</center>", unsafe_allow_html=True)
 
 # Sidebar per i preset e controlli globali
 st.sidebar.header("🎛️ Controlli")
@@ -76,4 +77,4 @@ if st.button("🚀 GENERA AUDIO"):
         
     except Exception as e:
         st.error(f"Errore nella generazione: {e}")
-    st.markdown("<br><hr><center>Copyright © 2026 VMMGAG</center>", unsafe_allow_html=True)
+    
