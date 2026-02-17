@@ -25,11 +25,11 @@ def generate_tone_adsr(freq, duration, velocity, sr=44100):
 # --- INTERFACCIA STREAMLIT ---
 st.set_page_config(page_title="Python Acid Synth", page_icon="🎹")
 st.title("🎹 Python Acid Synth")
-st.markdown("Genera loop acidi direttamente nel browser e scaricali in WAV.")
+st.markdown("Genera loop acidi o processa i tuoi campioni direttamente nel browser.")
 st.caption("Copyright © 2026 VMMGAG")
 
 # Sidebar per i preset e controlli globali
-st.sidebar.header("🎛️ Controlli")
+st.sidebar.header("🎛️ Controlli Synth")
 preset_name = st.sidebar.selectbox("Carica Preset", ["Custom", "Basso Techno", "Melodia Acid"])
 
 # Logica Preset
@@ -44,36 +44,70 @@ bpm = st.sidebar.slider("BPM", 60, 200, d_bpm)
 root_note = st.sidebar.number_input("Frequenza Base (Hz)", value=d_root)
 c_max = st.sidebar.slider("Cutoff Massimo Filtro", 0.01, 0.50, d_cmax)
 
-pattern_input = st.text_area("Pattern (semitoni separati da virgola)", d_pattern)
+# --- SEZIONE IMPORTAZIONE ---
+st.sidebar.markdown("---")
+st.sidebar.header("📂 Sampler")
+uploaded_file = st.sidebar.file_uploader("Carica un file .wav", type=["wav"])
 
-if st.button("🚀 GENERA AUDIO"):
-    try:
-        pattern = [int(x.strip()) for x in pattern_input.split(",")]
-        # Per semplicità usiamo velocity fissa a 1.0 nella web app o espandibile
-        note_duration = (60 / bpm) / 4
-        sample_rate = 44100
-        
-        full_sequence = []
-        for i, step in enumerate(pattern):
-            freq = root_note * (2 ** (step / 12))
-            nota = generate_tone_adsr(freq, note_duration, 1.0)
-            cutoff = 0.05 + (c_max - 0.05) * abs(np.sin(i * 0.4))
-            full_sequence.append(apply_lowpass_filter(nota, cutoff))
+# Sezione Layout Principale
+col1, col2 = st.columns(2)
 
-        audio_buffer = np.concatenate(full_sequence)
-        audio_buffer /= np.max(np.abs(audio_buffer))
-        
-        # Converti per WAV
-        audio_int16 = (audio_buffer * 32767).astype(np.int16)
-        
-        # Buffer di memoria
-        virtual_file = io.BytesIO()
-        wavfile.write(virtual_file, sample_rate, audio_int16)
-        
-        st.audio(virtual_file)
-        st.download_button(label="💾 Scarica .WAV", data=virtual_file, file_name="acid_loop.wav", mime="audio/wav")
-        st.success("Audio generato! Clicca Play sopra.")
-        
-    except Exception as e:
-        st.error(f"Errore nella generazione: {e}")
-    st.markdown("<br><hr><center>Copyright © 2026 VMMGAG</center>", unsafe_allow_html=True)
+with col1:
+    pattern_input = st.text_area("Pattern Sequencer (semitoni)", d_pattern)
+    if st.button("🚀 GENERA AUDIO SYNTH"):
+        try:
+            pattern = [int(x.strip()) for x in pattern_input.split(",")]
+            note_duration = (60 / bpm) / 4
+            sample_rate = 44100
+            
+            full_sequence = []
+            for i, step in enumerate(pattern):
+                freq = root_note * (2 ** (step / 12))
+                nota = generate_tone_adsr(freq, note_duration, 1.0)
+                cutoff = 0.05 + (c_max - 0.05) * abs(np.sin(i * 0.4))
+                full_sequence.append(apply_lowpass_filter(nota, cutoff))
+
+            audio_buffer = np.concatenate(full_sequence)
+            audio_buffer /= np.max(np.abs(audio_buffer))
+            
+            audio_int16 = (audio_buffer * 32767).astype(np.int16)
+            virtual_file = io.BytesIO()
+            wavfile.write(virtual_file, sample_rate, audio_int16)
+            
+            st.audio(virtual_file)
+            st.download_button(label="💾 Scarica Synth .WAV", data=virtual_file, file_name="acid_synth.wav", mime="audio/wav")
+        except Exception as e:
+            st.error(f"Errore Synth: {e}")
+
+with col2:
+    if uploaded_file is not None:
+        st.write("🎹 **Modalità Sampler Attiva**")
+        if st.button("🎛️ PROCESSA FILE CARICATO"):
+            try:
+                sr_up, data_up = wavfile.read(uploaded_file)
+                
+                # Conversione in Mono se Stereo
+                if len(data_up.shape) > 1:
+                    data_up = data_up[:, 0]
+                
+                # Normalizzazione float32
+                audio_float = data_up.astype(np.float32)
+                audio_float /= np.max(np.abs(audio_float))
+                
+                # Applichiamo il filtro usando il c_max dello slider
+                audio_filtered = apply_lowpass_filter(audio_float, c_max)
+                
+                # Export
+                audio_int16_up = (audio_filtered * 32767).astype(np.int16)
+                virtual_file_up = io.BytesIO()
+                wavfile.write(virtual_file_up, sr_up, audio_int16_up)
+                
+                st.audio(virtual_file_up)
+                st.download_button(label="💾 Scarica Sample .WAV", data=virtual_file_up, file_name="processed_sample.wav", mime="audio/wav")
+                st.success("Campione filtrato!")
+            except Exception as e:
+                st.error(f"Errore Sampler: {e}")
+    else:
+        st.info("Carica un .wav nella sidebar per usare il sampler.")
+
+st.markdown("<br><hr><center>Copyright © 2026 VMMGAG</center>", unsafe_allow_html=True)
