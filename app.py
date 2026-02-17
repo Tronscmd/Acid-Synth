@@ -3,7 +3,7 @@ import numpy as np
 from scipy.io import wavfile
 import io
 
-# --- FUNZIONI DSP (Il cuore del tuo synth) ---
+# --- FUNZIONI DSP ---
 def apply_lowpass_filter(data, cutoff_ratio):
     out = np.zeros_like(data)
     alpha = max(0.01, min(0.4, cutoff_ratio))
@@ -22,43 +22,89 @@ def generate_tone_adsr(freq, duration, velocity, sr=44100):
                           np.full(n_s, 0.3), np.linspace(0.3, 0, n_r)])
     return wave * env * velocity
 
+def detect_pitch_to_pattern(audio_data, sr, root_freq, steps=16):
+    """Analizza l'audio e restituisce una stringa di semitoni rispetto alla nota base"""
+    if np.max(np.abs(audio_data)) == 0: return "0"
+    
+    samples_per_step = len(audio_data) // steps
+    detected_steps = []
+    
+    for i in range(steps):
+        segment = audio_data[i*samples_per_step : (i+1)*samples_per_step]
+        if np.max(np.abs(segment)) < 0.02: # Soglia rumore
+            detected_steps.append(0)
+            continue
+            
+        # Analisi frequenza dominante tramite FFT (Fast Fourier Transform)
+        window = segment * np.hanning(len(segment))
+        fft = np.fft.rfft(window)
+        freqs = np.fft.rfftfreq(len(segment), 1/sr)
+        idx = np.argmax(np.abs(fft))
+        freq = freqs[idx]
+        
+        if freq > 0:
+            # Calcolo semitoni: 12 * log2(f_rilevata / f_base)
+            semitones = round(12 * np.log2(freq / root_freq))
+            detected_steps.append(int(np.clip(semitones, -24, 24)))
+        else:
+            detected_steps.append(0)
+            
+    return ", ".join(map(str, detected_steps))
+
 # --- INTERFACCIA STREAMLIT ---
 st.set_page_config(page_title="Python Acid Synth", page_icon="🎹")
-st.title("🎹 Python Acid Synth")
-st.markdown("Genera loop acidi o processa i tuoi campioni direttamente nel browser.")
+st.title("🎹 Python Acid Synth & Analyzer")
+st.markdown("Genera loop o estrai note dai tuoi campioni WAV.")
 st.caption("Copyright © 2026 VMMGAG")
 
-# Sidebar per i preset e controlli globali
+# Inizializzazione dello stato del pattern
+if 'current_pattern' not in st.session_state:
+    st.session_state.current_pattern = "0, 12, 3, 7"
+
+# Sidebar
 st.sidebar.header("🎛️ Controlli Synth")
 preset_name = st.sidebar.selectbox("Carica Preset", ["Custom", "Basso Techno", "Melodia Acid"])
 
-# Logica Preset
+# Logica Preset (Aggiorna lo stato se cambiano)
 if preset_name == "Basso Techno":
     d_root, d_bpm, d_pattern, d_cmax = 41.20, 130, "0, 0, 0, 0, 12, 0, 0, 0, 3, 0, 0, 0, 5, 0, 3, 2", 0.15
+    if st.sidebar.button("Applica Preset Basso"): st.session_state.current_pattern = d_pattern
 elif preset_name == "Melodia Acid":
     d_root, d_bpm, d_pattern, d_cmax = 110.0, 140, "0, 12, 0, 24, 12, 0, 7, 10, 12, 24, 12, 7, 3, 5, 0, 12", 0.35
+    if st.sidebar.button("Applica Preset Acid"): st.session_state.current_pattern = d_pattern
 else:
-    d_root, d_bpm, d_pattern, d_cmax = 90.0, 120, "0, 12, 3, 7", 0.20
+    d_root, d_bpm, d_cmax = 90.0, 120, 0.20
 
 bpm = st.sidebar.slider("BPM", 60, 200, d_bpm)
 root_note = st.sidebar.number_input("Frequenza Base (Hz)", value=d_root)
 c_max = st.sidebar.slider("Cutoff Massimo Filtro", 0.01, 0.50, d_cmax)
 
-# --- SEZIONE IMPORTAZIONE ---
+# --- SEZIONE ANALIZZATORE ---
 st.sidebar.markdown("---")
-st.sidebar.header("📂 Sampler")
-# Sostituisci la riga precedente con questa:
-uploaded_file = st.sidebar.file_uploader(
-    "Carica un campione audio", 
-    type=["wav", "WAV"], 
-    help="Assicurati che il file sia in formato .wav"
-)
+st.sidebar.header("🔍 Analizzatore Audio-to-Pattern")
+uploaded_file = st.sidebar.file_uploader("Carica un file .wav per estrarre le note", type=["wav", "WAV"])
+
+if uploaded_file is not None:
+    if st.sidebar.button("🔍 ESTRAI NOTE E COPIA NEL SEQUENCER"):
+        try:
+            sr_up, data_up = wavfile.read(uploaded_file)
+            if len(data_up.shape) > 1: data_up = data_up[:, 0]
+            # Estraiamo il pattern basandoci sulla frequenza root_note impostata
+            extracted_pattern = detect_pitch_to_pattern(data_up, sr_up, root_note)
+            st.session_state.current_pattern = extracted_pattern
+            st.sidebar.success("Note estratte con successo!")
+        except Exception as e:
+            st.sidebar.error(f"Errore analisi: {e}")
 
 # Sezione Layout Principale
 col1, col2 = st.columns(2)
 
 with col1:
-    pattern_input = st.text_area("Pattern Sequencer (semitoni)", d_pattern)
+    # L'area di testo legge dallo Session State
+    pattern_input = st.text_area("Pattern Sequencer (Modificabile)", value=st.session_state.current_pattern, key="pattern_area")
+    # Aggiorniamo lo stato ogni volta che l'utente scrive
+    st.session_state.current_pattern = pattern_input
+
     if st.button("🚀 GENERA AUDIO SYNTH"):
         try:
             pattern = [int(x.strip()) for x in pattern_input.split(",")]
@@ -87,32 +133,23 @@ with col1:
 with col2:
     if uploaded_file is not None:
         st.write("🎹 **Modalità Sampler Attiva**")
-        if st.button("🎛️ PROCESSA FILE CARICATO"):
+        st.info("Puoi processare il file originale o estrarne le note dalla sidebar.")
+        if st.button("🎛️ PROCESSA FILE CARICATO (FILTRO)"):
             try:
                 sr_up, data_up = wavfile.read(uploaded_file)
-                
-                # Conversione in Mono se Stereo
-                if len(data_up.shape) > 1:
-                    data_up = data_up[:, 0]
-                
-                # Normalizzazione float32
+                if len(data_up.shape) > 1: data_up = data_up[:, 0]
                 audio_float = data_up.astype(np.float32)
                 audio_float /= np.max(np.abs(audio_float))
-                
-                # Applichiamo il filtro usando il c_max dello slider
                 audio_filtered = apply_lowpass_filter(audio_float, c_max)
                 
-                # Export
                 audio_int16_up = (audio_filtered * 32767).astype(np.int16)
                 virtual_file_up = io.BytesIO()
                 wavfile.write(virtual_file_up, sr_up, audio_int16_up)
                 
                 st.audio(virtual_file_up)
-                st.download_button(label="💾 Scarica Sample .WAV", data=virtual_file_up, file_name="processed_sample.wav", mime="audio/wav")
-                st.success("Campione filtrato!")
             except Exception as e:
                 st.error(f"Errore Sampler: {e}")
     else:
-        st.info("Carica un .wav nella sidebar per usare il sampler.")
+        st.info("Carica un .wav nella sidebar per sbloccare l'analisi e il sampler.")
 
 st.markdown("<br><hr><center>Copyright © 2026 VMMGAG</center>", unsafe_allow_html=True)
