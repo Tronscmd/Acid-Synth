@@ -47,7 +47,12 @@ c_max = st.sidebar.slider("Cutoff Massimo Filtro", 0.01, 0.50, d_cmax)
 # --- SEZIONE IMPORTAZIONE ---
 st.sidebar.markdown("---")
 st.sidebar.header("📂 Sampler")
-uploaded_file = st.sidebar.file_uploader("Carica un file .wav", type=["wav"])
+# Sostituisci la riga precedente con questa:
+uploaded_file = st.sidebar.file_uploader(
+    "Carica un campione audio", 
+    type=["wav", "WAV"], 
+    help="Assicurati che il file sia in formato .wav"
+)
 
 # Sezione Layout Principale
 col1, col2 = st.columns(2)
